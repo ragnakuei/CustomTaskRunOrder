@@ -5,9 +5,13 @@ namespace CustomTaskRunOrder
 {
     public partial class Form1 : Form
     {
+        private readonly CustomTaskRunService<ContextDto> _customTaskRunService;
+
         public Form1()
         {
             InitializeComponent();
+
+            _customTaskRunService = new CustomTaskRunService<ContextDto>();
 
             InitialActionList();
 
@@ -16,19 +20,17 @@ namespace CustomTaskRunOrder
 
         #region ListBoxActions
 
-        private Dictionary<string, Func<ContextDto, Task>> _actions;
-
         private void InitialActionList()
         {
-            _actions = new Dictionary<string, Func<ContextDto, Task>>
-                       {
-                           ["Action1"] = (dto) => Action1(dto),
-                           ["Action2"] = (dto) => Action2(dto),
-                           ["Action3"] = (dto) => Action3(dto),
-                           ["Delay"]   = (dto) => Delay(dto),
-                       };
+            _customTaskRunService.Actions = new Dictionary<string, Func<ContextDto, Task>>
+                                            {
+                                                ["Action1"] = (dto) => Action1(dto),
+                                                ["Action2"] = (dto) => Action2(dto),
+                                                ["Action3"] = (dto) => Action3(dto),
+                                                ["Delay"]   = (dto) => Delay(dto),
+                                            };
 
-            lbxActions.Items.AddRange(_actions.Keys.ToArray());
+            lbxActions.Items.AddRange(_customTaskRunService.Actions.Keys.ToArray());
         }
 
         #region Actions
@@ -70,32 +72,62 @@ namespace CustomTaskRunOrder
         /// <summary>
         /// 在 GroupBox Flow ，先往下，再往右
         /// </summary>
-        private List<List<Control>> _flowControls = new();
+        private List<List<Control>> _groupBoxFlowControls = new();
 
         private readonly int _groupBoxFlowButtonSizeWidth  = 80;
         private readonly int _groupBoxFlowButtonSizeHeight = 60;
 
         private void InitialGroupBoxFlow()
         {
-            _flowControls = new List<List<Control>>
-                            {
-                                new List<Control>
-                                {
-                                    GeneratGroupBoxFlowButton("Add")
-                                }
-                            };
+            _customTaskRunService.TaskGroups = new List<List<string>>
+                                               {
+                                                   new(),
+                                               };
 
+            GenerateGroupBoxFlowControls();
             ReRenderGroupBoxFlowControls();
         }
 
+        private void GenerateGroupBoxFlowControls()
+        {
+            _groupBoxFlowControls = new List<List<Control>>();
 
-        private Button GeneratGroupBoxFlowButton(string text)
+            if (_customTaskRunService.TotalTasksCount == 0)
+            {
+                _groupBoxFlowControls.Add(new List<Control>
+                                          {
+                                              GeneratGroupBoxFlowButton("Add"),
+                                          });
+                return;
+            }
+
+            for (int y = 0; y < _customTaskRunService.TaskGroups.Count; y++)
+            {
+                _groupBoxFlowControls.Add(new List<Control>());
+
+                for (int x = 0; x < _customTaskRunService.TaskGroups[y].Count; x++)
+                {
+                    _groupBoxFlowControls[y].Add(GeneratGroupBoxFlowButton(_customTaskRunService.TaskGroups[y][x], false));
+                }
+
+                _groupBoxFlowControls[y].Add(GeneratGroupBoxFlowButton("Add Parallel Task"));
+            }
+
+            _groupBoxFlowControls.Add(new List<Control>
+                                      {
+                                          GeneratGroupBoxFlowButton("Add Sequence Task"),
+                                      });
+        }
+
+
+        private Button GeneratGroupBoxFlowButton(string text, bool enabled = true)
         {
             var button = new Button
                          {
                              Size      = new Size(_groupBoxFlowButtonSizeWidth, _groupBoxFlowButtonSizeHeight),
                              Text      = text,
                              TextAlign = ContentAlignment.MiddleCenter,
+                             Enabled   = enabled,
                          };
 
             button.Click += new EventHandler(GroupBoxFlowButton_Click);
@@ -109,19 +141,19 @@ namespace CustomTaskRunOrder
             var startY = 20;
             var spaceY = _groupBoxFlowButtonSizeHeight + 10;
 
-            for (int y = 0; y < _flowControls.Count; y++)
+            for (int y = 0; y < _groupBoxFlowControls.Count; y++)
             {
                 var startX = 10;
                 var spaceX = _groupBoxFlowButtonSizeWidth + 10;
 
-                for (int x = 0; x < _flowControls[y].Count; x++)
+                for (int x = 0; x < _groupBoxFlowControls[y].Count; x++)
                 {
-                    var control = _flowControls[y][x];
+                    var control = _groupBoxFlowControls[y][x];
                     control.Top  = startY + spaceY * y;
                     control.Left = startX + spaceX * x;
                     control.Tag  = $"{y}-{x}";
 
-                    gbxFlow.Controls.Add(_flowControls[y][x]);
+                    gbxFlow.Controls.Add(_groupBoxFlowControls[y][x]);
                 }
             }
         }
@@ -134,10 +166,7 @@ namespace CustomTaskRunOrder
             }
 
             var targetButton = sender as Button;
-            targetButton.Text    = selectedItem;
-            targetButton.Enabled = false;
-
-            var tagString = targetButton?.Tag.ToString();
+            var tagString    = targetButton?.Tag.ToString();
             if (tagString.IsNullOrWhiteSpace())
             {
                 return;
@@ -153,19 +182,24 @@ namespace CustomTaskRunOrder
                 return;
             }
 
-            // 加 右
-            var yControls = _flowControls[indexY.Value];
-            yControls.Add(GeneratGroupBoxFlowButton("Add Parallel Task"));
-
-            if (indexX == 0)
+            if (indexY.Value == 0
+             && indexX.Value == 0)
             {
-                // 加 下
-                _flowControls.Add(new List<Control>
-                                  {
-                                      GeneratGroupBoxFlowButton("Add Sequence Task")
-                                  });
+                _customTaskRunService.TaskGroups[indexY.Value].Add(selectedItem);
+            }
+            else if (indexX.Value == 0)
+            {
+                _customTaskRunService.TaskGroups.Add(new List<string>
+                                                     {
+                                                         selectedItem
+                                                     });
+            }
+            else
+            {
+                _customTaskRunService.TaskGroups[indexY.Value].Add(selectedItem);
             }
 
+            GenerateGroupBoxFlowControls();
             ReRenderGroupBoxFlowControls();
         }
 
@@ -189,23 +223,17 @@ namespace CustomTaskRunOrder
                                  StringResult = new ConcurrentBag<string>()
                              };
 
-            foreach (var flowGroup in _flowControls)
-            {
-                Task[] parallelTasks = flowGroup.Select(c => _actions.GetValueOrDefault(c.Text))
-                                                .Where(t => t != null)
-                                                .Select(t => t.Invoke(contextDto))
-                                                .ToArray();
+            await _customTaskRunService.Run(contextDto,
+                                            () =>
+                                            {
+                                                var output = contextDto.StringResult.Join("\n");
 
-                await Task.WhenAll(parallelTasks);
-
-                var output = contextDto.StringResult.Join("\n");
-
-                SynchronizationContext.Current.Post(_ =>
-                                                    {
-                                                        rtbxResult.Text = output;
-                                                    },
-                                                    null);
-            }
+                                                SynchronizationContext.Current.Post(_ =>
+                                                                                    {
+                                                                                        rtbxResult.Text = output;
+                                                                                    },
+                                                                                    null);
+                                            });
 
             SynchronizationContext.Current.Post(_ =>
                                                 {
