@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomTaskRunOrder", "CustomTaskRunOrder\CustomTaskRunOrder.csproj", "{83DB5179-6A18-427D-A07D-B0223AB13339}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{83DB5179-6A18-427D-A07D-B0223AB13339}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83DB5179-6A18-427D-A07D-B0223AB13339}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83DB5179-6A18-427D-A07D-B0223AB13339}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83DB5179-6A18-427D-A07D-B0223AB13339}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FD6E67A4-9B41-447F-B9E0-F739F110B993}
+	EndGlobalSection
+EndGlobal
