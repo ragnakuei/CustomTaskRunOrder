@@ -1,4 +1,6 @@
-﻿namespace CustomTaskRunOrder;
+﻿using System.Collections.Concurrent;
+
+namespace CustomTaskRunOrder;
 
 public class ContextDto
 {
@@ -7,5 +9,5 @@ public class ContextDto
     /// </summary>
     public int DelayTime { get; set; }
 
-    public string StringResult { get; set; }
+    public ConcurrentBag<string> StringResult { get; set; }
 }

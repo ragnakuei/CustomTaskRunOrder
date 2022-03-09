@@ -1,11 +1,10 @@
+using System.Collections.Concurrent;
 using KueiExtensions;
 
 namespace CustomTaskRunOrder
 {
     public partial class Form1 : Form
     {
-        private Dictionary<string, Action<ContextDto>> _actions;
-
         public Form1()
         {
             InitializeComponent();
@@ -15,34 +14,80 @@ namespace CustomTaskRunOrder
             InitialGroupBoxFlow();
         }
 
+        #region ListBoxActions
+
+        private Dictionary<string, Func<ContextDto, Task>> _actions;
+
         private void InitialActionList()
         {
-            _actions = new Dictionary<string, Action<ContextDto>>
+            _actions = new Dictionary<string, Func<ContextDto, Task>>
                        {
                            ["Action1"] = (dto) => Action1(dto),
                            ["Action2"] = (dto) => Action2(dto),
                            ["Action3"] = (dto) => Action3(dto),
                            ["Delay"]   = (dto) => Delay(dto),
                        };
+
+            lbxActions.Items.AddRange(_actions.Keys.ToArray());
         }
+
+        #region Actions
+
+        private async Task Delay(ContextDto dto)
+        {
+            dto.StringResult.Add($"Delay {dto.DelayTime}");
+
+            await Task.Delay(dto.DelayTime);
+        }
+
+        private async Task Action1(ContextDto dto)
+        {
+            dto.StringResult.Add("Action1");
+
+            await Task.CompletedTask;
+        }
+
+        private async Task Action2(ContextDto dto)
+        {
+            dto.StringResult.Add("Action2");
+
+            await Task.CompletedTask;
+        }
+
+        private async Task Action3(ContextDto dto)
+        {
+            dto.StringResult.Add("Action3");
+
+            await Task.CompletedTask;
+        }
+
+        #endregion
+
+        #endregion
+
+        #region GroupBoxFlow
 
         /// <summary>
         /// 在 GroupBox Flow ，先往下，再往右
         /// </summary>
         private List<List<Control>> _flowControls = new();
 
+        private readonly int _groupBoxFlowButtonSizeWidth  = 80;
+        private readonly int _groupBoxFlowButtonSizeHeight = 60;
+
         private void InitialGroupBoxFlow()
         {
-            _flowControls.Add(new List<Control>
-                              {
-                                  GeneratGroupBoxFlowButton("Add")
-                              });
+            _flowControls = new List<List<Control>>
+                            {
+                                new List<Control>
+                                {
+                                    GeneratGroupBoxFlowButton("Add")
+                                }
+                            };
 
             ReRenderGroupBoxFlowControls();
         }
 
-        private readonly int _groupBoxFlowButtonSizeWidth  = 120;
-        private readonly int _groupBoxFlowButtonSizeHeight = 60;
 
         private Button GeneratGroupBoxFlowButton(string text)
         {
@@ -83,7 +128,13 @@ namespace CustomTaskRunOrder
 
         private void GroupBoxFlowButton_Click(object? sender, EventArgs e)
         {
+            if (lbxActions.SelectedItem is not string selectedItem)
+            {
+                return;
+            }
+
             var targetButton = sender as Button;
+            targetButton.Text    = selectedItem;
             targetButton.Enabled = false;
 
             var tagString = targetButton?.Tag.ToString();
@@ -118,34 +169,57 @@ namespace CustomTaskRunOrder
             ReRenderGroupBoxFlowControls();
         }
 
-        private async Task Delay(ContextDto dto)
+        #endregion
+
+        private async void buttonRun_Click(object sender, EventArgs e)
         {
-            await Task.Delay(dto.DelayTime);
+            SynchronizationContext.Current.Post(_ =>
+                                                {
+                                                    rtbxResult.Text  = string.Empty;
+                                                    btnRun.Text      = "Running";
+                                                    btnRun.Enabled   = false;
+                                                    btnReset.Enabled = false;
+                                                },
+                                                null);
+
+            var contextDto = new ContextDto
+                             {
+                                 // delay 先固定給定 2 秒
+                                 DelayTime    = 2000,
+                                 StringResult = new ConcurrentBag<string>()
+                             };
+
+            foreach (var flowGroup in _flowControls)
+            {
+                Task[] parallelTasks = flowGroup.Select(c => _actions.GetValueOrDefault(c.Text))
+                                                .Where(t => t != null)
+                                                .Select(t => t.Invoke(contextDto))
+                                                .ToArray();
+
+                await Task.WhenAll(parallelTasks);
+
+                var output = contextDto.StringResult.Join("\n");
+
+                SynchronizationContext.Current.Post(_ =>
+                                                    {
+                                                        rtbxResult.Text = output;
+                                                    },
+                                                    null);
+            }
+
+            SynchronizationContext.Current.Post(_ =>
+                                                {
+                                                    btnRun.Text      = "Run";
+                                                    btnRun.Enabled   = true;
+                                                    btnReset.Enabled = true;
+                                                },
+                                                null);
         }
 
-        private async Task Action1(ContextDto dto)
+        private void btnReset_Click(object sender, EventArgs e)
         {
-            dto.StringResult = "Action1";
-
-            await Task.CompletedTask;
-        }
-
-        private async Task Action2(ContextDto dto)
-        {
-            dto.StringResult = "Action2";
-
-            await Task.CompletedTask;
-        }
-
-        private async Task Action3(ContextDto dto)
-        {
-            dto.StringResult = "Action3";
-
-            await Task.CompletedTask;
-        }
-
-        private void button1_Click(object sender, EventArgs e)
-        {
+            InitialGroupBoxFlow();
+            rtbxResult.Text = string.Empty;
         }
     }
 }
